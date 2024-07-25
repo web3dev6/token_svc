@@ -102,7 +102,6 @@ export class TransactionCronService {
         // process unconfirmedTransactions
         for (const transaction of unconfirmedTransactions) {
           // TODO: need to put validation to mint/transfer/burn only for a deployed valid tokenAddress
-          // TODO: also need to consider sad paths and mark txn as FAILED
           switch (transaction.context) {
             case CREATE_TOKEN:
               await this.processCreateToken(transaction);
@@ -118,12 +117,14 @@ export class TransactionCronService {
               break;
             default:
               console.warn(`Unknown transaction context: ${transaction.context}`);
+              this.failTransaction(transaction.id);
               break;
           }
         }
         console.log("*** END Transaction Cron Job ***");
       } catch (error) {
         console.error("Error processing transactions:", error);
+        console.log("*** END Transaction Cron Job ***");
       }
     });
   }
@@ -163,6 +164,7 @@ export class TransactionCronService {
       console.log("Created token:", token);
     } catch (error) {
       console.error("Error in processCreateToken:", error);
+      this.failTransaction(transaction.id);
       throw error;
     }
   }
@@ -183,6 +185,7 @@ export class TransactionCronService {
       await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processMintToken:", error);
+      this.failTransaction(transaction.id);
       throw error;
     }
   }
@@ -203,6 +206,7 @@ export class TransactionCronService {
       await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processTransferToken:", error);
+      this.failTransaction(transaction.id);
       throw error;
     }
   }
@@ -223,6 +227,7 @@ export class TransactionCronService {
       await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processBurnToken:", error);
+      this.failTransaction(transaction.id);
       throw error;
     }
   }
@@ -252,9 +257,26 @@ export class TransactionCronService {
           status: "CONFIRMED"
         },
       });
-      console.log(`Transaction ${id} confirmed!`);
+      console.log(`Transaction ${id} CONFIRMED!`);
     } catch (error) {
       console.error(`Error in confirming transaction ${id}: `, error);
+      throw error;
+    }
+  }
+
+  private async failTransaction(id: bigint): Promise<void> {
+    try {
+      await db.transactions.update({
+        where: {
+          id
+        },
+        data: {
+          status: "FAILED"
+        },
+      });
+      console.log(`Transaction ${id} FAILED!`);
+    } catch (error) {
+      console.error(`Error in failing transaction ${id}: `, error);
       throw error;
     }
   }
