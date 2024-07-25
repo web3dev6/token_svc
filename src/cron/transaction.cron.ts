@@ -60,8 +60,18 @@ export class TransactionCronService {
 
   // TODO: need to properly implement this - so txn is done from differnt wallets
   private async getSignerForWalletAddress(walletAddress: string): Promise<ethers.Wallet> {
-    const privateKey = "cd48a5edc6a1ed6aa3b6e8b71f14204e118dbc88957aadad31a5449e820b54c3";
-    return new ethers.Wallet(privateKey, this.provider);
+    try{
+      console.warn("walletAddress and TXN_SIGNER_PVT_KEY is same for all users");
+      const privateKey = process.env.TXN_SIGNER_PVT_KEY;
+      if(!privateKey){
+        throw new Error("Please make sure to add TXN_SIGNER_PVT_KEY in .env");
+      }
+      return new ethers.Wallet(privateKey, this.provider);
+    } catch (error) {
+      console.error("Error in sendTransaction:", error);
+      throw error;
+    }
+   
   }
 
   async startCronJob() {
