@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { db } from "../../../prisma/prisma";
+import { db } from "../../../prisma";
 import { Token } from "../../types/token";
 
 export class TokenService {

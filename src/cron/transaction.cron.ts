@@ -1,5 +1,5 @@
 import { schedule } from "node-cron";
-import { db } from "../../prisma/prisma";
+import { db } from "../../prisma";
 import { Transaction } from "../types/transaction";
 import { isBurnTokenPayload, isCreateTokenPayload, isMintTokenPayload, isTransferTokenPayload } from "../types/payload";
 import fs from "fs";
