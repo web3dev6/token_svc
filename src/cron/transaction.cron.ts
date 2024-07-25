@@ -51,14 +51,14 @@ export class TransactionCronService {
       const transaction = await contractInstance[methodName](...args);
       console.log(`Transaction sent: ${transaction.hash}`);
       await transaction.wait();
-      console.log(`Transaction confirmed in block: ${transaction.blockNumber}`);
     } catch (error) {
       console.error("Error in sendTransaction:", error);
       throw error;
     }
   }
 
-  // TODO: need to properly implement this - so txn is done from differnt wallets
+  // TODO: need to properly implement this - so txn is done from different wallets
+  // TODO: can use a lib for more readable logging
   private async getSignerForWalletAddress(walletAddress: string): Promise<ethers.Wallet> {
     try{
       console.warn("walletAddress and TXN_SIGNER_PVT_KEY is same for all users");
@@ -79,16 +79,30 @@ export class TransactionCronService {
     schedule(cronExp, async () => {
       console.log("*** START Transaction Cron Job ***");
       try {
-        // TODO: need to refactor to not pick up if txn already being processed, add tx_status field in transactions
         const unconfirmedTransactions = await db.transactions.findMany({
           where: {
             is_confirmed: false,
+            status: "PENDING"
           },
           include: {
             users: true,
           },
         });
+        // mark all unconfirmedTransactions status as IN_PROGRESS first
         for (const transaction of unconfirmedTransactions) {
+          await db.transactions.update({
+            where: {
+              id: transaction.id,
+            },
+            data: {
+              status: "IN_PROGRESS",
+            },
+          });
+        }
+        // process unconfirmedTransactions
+        for (const transaction of unconfirmedTransactions) {
+          // TODO: need to put validation to mint/transfer/burn only for a deployed valid tokenAddress
+          // TODO: also need to consider sad paths and mark txn as FAILED
           switch (transaction.context) {
             case CREATE_TOKEN:
               await this.processCreateToken(transaction);
@@ -124,7 +138,7 @@ export class TransactionCronService {
       const { name, symbol, amount, owner } = transaction.payload;
 
       const accessManagerAddr = await this.deployContract("BaseAccessManager", transaction.users.wallet_address, [owner]); // owner itself is the admin in access_manager contract
-      console.log(`accessManagerAddr: `, accessManagerAddr);
+      console.log(`Contract accessManagerAddr: `, accessManagerAddr);
       const erc20Addr = await this.deployContract("BaseERC20", transaction.users.wallet_address, [
         name,
         symbol,
@@ -132,18 +146,9 @@ export class TransactionCronService {
         owner,
         accessManagerAddr,
       ]);
-      console.log(`erc20Addr: `, erc20Addr);
+      console.log(`Contract erc20Addr: `, erc20Addr);
 
-      await db.transactions.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          is_confirmed: true,
-        },
-      });
-      console.log(`Transaction ${transaction.id} confirmed!`);
-
+      await this.confirmTransaction(transaction.id);
       const token = await db.tokens.create({
         data: {
           username: transaction.users.username,
@@ -169,21 +174,13 @@ export class TransactionCronService {
         console.error("Invalid payload for given txn context");
         return;
       }
-      const { tokenAddress, recipeintAddress, amount } = transaction.payload;
+      const { tokenAddress, recipientAddress, amount } = transaction.payload;
       const decimals = await this.getDecimalsForToken(tokenAddress);
       const amountWei = ethers.parseUnits(amount, decimals);
 
-      await this.sendTransaction(tokenAddress, "BaseERC20", "mint", transaction.users.wallet_address, [recipeintAddress, amountWei]);
+      await this.sendTransaction(tokenAddress, "BaseERC20", "mint", transaction.users.wallet_address, [recipientAddress, amountWei]);
 
-      await db.transactions.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          is_confirmed: true,
-        },
-      });
-      console.log(`Transaction ${transaction.id} confirmed!`);
+      await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processMintToken:", error);
       throw error;
@@ -197,21 +194,13 @@ export class TransactionCronService {
         console.error("Invalid payload for given txn context");
         return;
       }
-      const { tokenAddress, recipeintAddress, amount } = transaction.payload;
+      const { tokenAddress, recipientAddress, amount } = transaction.payload;
       const decimals = await this.getDecimalsForToken(tokenAddress);
       const amountWei = ethers.parseUnits(amount, decimals);
 
-      await this.sendTransaction(tokenAddress, "BaseERC20", "transfer", transaction.users.wallet_address, [recipeintAddress, amountWei]);
+      await this.sendTransaction(tokenAddress, "BaseERC20", "transfer", transaction.users.wallet_address, [recipientAddress, amountWei]);
 
-      await db.transactions.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          is_confirmed: true,
-        },
-      });
-      console.log(`Transaction ${transaction.id} confirmed!`);
+      await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processTransferToken:", error);
       throw error;
@@ -231,15 +220,7 @@ export class TransactionCronService {
 
       await this.sendTransaction(tokenAddress, "BaseERC20", "burn", transaction.users.wallet_address, [amountWei]);
 
-      await db.transactions.update({
-        where: {
-          id: transaction.id,
-        },
-        data: {
-          is_confirmed: true,
-        },
-      });
-      console.log(`Transaction ${transaction.id} confirmed!`);
+      await this.confirmTransaction(transaction.id);
     } catch (error) {
       console.error("Error in processBurnToken:", error);
       throw error;
@@ -256,6 +237,24 @@ export class TransactionCronService {
       return decimals;
     } catch (error) {
       console.error("Error fetching token decimals: ", error);
+      throw error;
+    }
+  }
+
+  private async confirmTransaction(id: bigint): Promise<void> {
+    try {
+      await db.transactions.update({
+        where: {
+          id
+        },
+        data: {
+          is_confirmed: true,
+          status: "CONFIRMED"
+        },
+      });
+      console.log(`Transaction ${id} confirmed!`);
+    } catch (error) {
+      console.error(`Error in confirming transaction ${id}: `, error);
       throw error;
     }
   }

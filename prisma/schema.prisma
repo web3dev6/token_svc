@@ -1,7 +1,3 @@
-// npx prisma init --datasource-provider postgresql
-// npx prisma db pull
-// npx prisma generate
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -28,7 +24,6 @@ model sessions {
   users         users    @relation(fields: [username], references: [username], onDelete: NoAction, onUpdate: NoAction)
 
   @@index([username])
-  @@index([username], map: "sessions_username_idx1")
 }
 
 model tokens {
@@ -51,8 +46,11 @@ model transactions {
   context      String   @db.VarChar
   payload      Json
   is_confirmed Boolean  @default(false)
+  status       String   @default("PENDING") @db.VarChar
   created_at   DateTime @default(now()) @db.Timestamptz(6)
   users        users    @relation(fields: [username], references: [username], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([context])
 }
 
 model users {

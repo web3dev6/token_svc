@@ -13,3 +13,7 @@ if (!global.__db) {
 db = global.__db;
 
 export { db };
+
+// npx prisma init --datasource-provider postgresql
+// npx prisma db pull
+// npx prisma generate

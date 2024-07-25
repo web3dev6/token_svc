@@ -18,7 +18,7 @@ export function isCreateTokenPayload(payload: any): payload is CreateTokenPayloa
 
 export type MintTokenPayload = {
   tokenAddress: string;
-  recipeintAddress: string;
+  recipientAddress: string;
   amount: string;
 };
 // Type guard function for MintTokenPayload
@@ -34,7 +34,7 @@ export function isMintTokenPayload(payload: any): payload is MintTokenPayload {
 
 export type TransferTokenPayload = {
   tokenAddress: string;
-  recipeintAddress: string;
+  recipientAddress: string;
   amount: string;
 };
 // Type guard function for TransferTokenPayload
